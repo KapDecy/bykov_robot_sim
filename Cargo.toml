@@ -44,6 +44,10 @@ bevy_infinite_grid = { git = "https://github.com/ForesightMiningSoftwareCorporat
 bevy_egui = "0.19"
 egui = "*"
 iyes_loopless = "0.9.1"
+serialport = "*"
+anyhow = "*"
+ctrlc = "3.2.1"
+ufmt = "*"
 
 # Enable a small amount of optimization in debug mode
 [profile.dev]
