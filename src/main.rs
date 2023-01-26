@@ -30,7 +30,7 @@ fn main() {
             wz: false,
             wy: false,
         })
-        .add_system(rotate.run_if(is_running))
+        .add_system(rotate)
         .add_plugin(WorldInspectorPlugin)
         .run();
 }
@@ -46,6 +46,9 @@ struct AngleAft(f32);
 
 #[derive(Component)]
 struct AngleCalib(f32);
+
+#[derive(Component)]
+struct RotationBef(Quat);
 
 #[derive(Debug, Component, PartialOrd, Ord, PartialEq, Eq)]
 enum Rotor {
@@ -91,6 +94,7 @@ fn setup(
             AngleAft(0.0),
             AngleCalib(0.0),
             Rotor::Sy,
+            RotationBef(Quat::IDENTITY),
         ))
         .id();
 
@@ -120,6 +124,7 @@ fn setup(
             AngleAft(0.0),
             AngleCalib(0.0),
             Rotor::Sz,
+            RotationBef(Quat::IDENTITY),
         ))
         .id();
 
@@ -149,6 +154,7 @@ fn setup(
             AngleAft(0.0),
             AngleCalib(0.0),
             Rotor::Ez,
+            RotationBef(Quat::IDENTITY),
         ))
         .id();
 
@@ -178,6 +184,7 @@ fn setup(
             AngleAft(0.0),
             AngleCalib(0.0),
             Rotor::Wz,
+            RotationBef(Quat::IDENTITY),
         ))
         .id();
 
@@ -207,6 +214,7 @@ fn setup(
             AngleAft(0.0),
             AngleCalib(0.0),
             Rotor::Wy,
+            RotationBef(Quat::IDENTITY),
         ))
         .id();
 
@@ -250,12 +258,13 @@ fn egui_system(
         &mut AngleCur,
         &mut AngleCalib,
         &Rotor,
+        &mut RotationBef,
     )>,
 ) {
     egui::Window::new("Arm Control").show(egui_context.ctx_mut(), |ui| {
         let mut v: Vec<_> = query.iter_mut().collect();
         v.sort_by(|a, b| a.5.cmp(b.5));
-        for (t, b, mut a, c, ac, r) in v {
+        for (t, b, mut a, c, ac, r, rotb) in v {
             match r {
                 Rotor::Sy => {
                     ui.add(egui::Slider::new(&mut a.0, -170.0..=170.0));
@@ -291,6 +300,7 @@ fn calibrate(
         &mut AngleCur,
         &mut AngleCalib,
         &Rotor,
+        &mut RotationBef,
     )>,
 ) {
     if let Some((write_to_port, read_from_port)) = port.0.as_mut() {
@@ -303,7 +313,7 @@ fn calibrate(
         println!("start reading");
         let buf = read_from_port.recv().unwrap().trim().to_string();
         println!("{:#?}", buf);
-        for (_, _, _, _, mut ac, r) in query.iter_mut() {
+        for (_, _, _, _, mut ac, r, _) in query.iter_mut() {
             match r {
                 Rotor::Sy => (),
                 Rotor::Sz => (),
@@ -328,6 +338,7 @@ fn run_simulation(
         &mut AngleCur,
         &mut AngleCalib,
         &Rotor,
+        &mut RotationBef,
     )>,
 ) {
     debug!("Simulation started!");
@@ -339,8 +350,8 @@ fn run_simulation(
 
     let (mut sy, mut sz, mut ez, mut wz, mut wy) = (0_i64, 0_i64, 0_i64, 0_i64, 0_i64);
 
-    for (mut t, mut b, a, mut c, ac, r) in query.iter_mut() {
-        // t.rotation = Quat::IDENTITY;
+    for (mut t, mut b, a, mut c, ac, r, mut rotb) in query.iter_mut() {
+        t.rotation = rotb.0;
 
         match r {
             Rotor::Sy => sy = (a.0 - b.0) as i64 * 555,
@@ -369,8 +380,7 @@ struct IsRunning {
 
 impl IsRunning {
     fn is_running(&self) -> bool {
-        // self.sy || self.sz || self.ez || self.wz || self.wy
-        true
+        self.sy || self.sz || self.ez || self.wz || self.wy
     }
 }
 
@@ -387,19 +397,22 @@ fn rotate(
         &mut AngleCur,
         &mut AngleAft,
         &Rotor,
+        &mut RotationBef,
     )>,
 ) {
-    // println!("");
-    // println!("");
-    for (mut t, mut b, mut c, a, r) in query.iter_mut() {
+    for (mut t, mut b, mut c, a, r, mut rotb) in query.iter_mut() {
         match r {
             Rotor::Sy => {
                 t.rotate_y(get_virtual_angle(a.0, c.0, time.delta_seconds()).to_radians());
                 // println!("{:?} {:?}", r, t.rotation.to_axis_angle());
                 // b.0 = (b.0 + (a.0 - b.0).signum());
                 c.0 += get_virtual_angle(a.0, c.0, time.delta_seconds());
-                if c.0 == a.0 {
+                // rotb.0 = t.rotation;
+                if (c.0 - a.0).abs() < 0.31 {
                     isr.sy = false
+                }
+                if isr.is_running() {
+                    rotb.0 = t.rotation;
                 }
             }
             Rotor::Sz => {
@@ -407,8 +420,12 @@ fn rotate(
                 // println!("{:?} {:?}", r, t.rotation.to_axis_angle());
                 // b.0 += (a.0 - b.0).signum();
                 c.0 += get_virtual_angle(a.0, c.0, time.delta_seconds());
-                if c.0 == a.0 {
+                // rotb.0 = t.rotation;
+                if (c.0 - a.0).abs() < 0.31 {
                     isr.sz = false
+                }
+                if isr.is_running() {
+                    rotb.0 = t.rotation;
                 }
             }
             Rotor::Ez => {
@@ -416,8 +433,12 @@ fn rotate(
                 // println!("{:?} {:?}", r, t.rotation.to_axis_angle());
                 // b.0 += (a.0 - b.0).signum();
                 c.0 += get_virtual_angle(a.0, c.0, time.delta_seconds());
-                if c.0 == a.0 {
+                // rotb.0 = t.rotation;
+                if (c.0 - a.0).abs() < 0.31 {
                     isr.ez = false
+                }
+                if isr.is_running() {
+                    rotb.0 = t.rotation;
                 }
             }
             Rotor::Wz => {
@@ -425,8 +446,12 @@ fn rotate(
                 // println!("{:?} {:?}", r, t.rotation.to_axis_angle());
                 // b.0 = (b.0 + (a.0 - b.0).signum());
                 c.0 += get_virtual_angle(a.0, c.0, time.delta_seconds());
-                if c.0 == a.0 {
+                // rotb.0 = t.rotation.clone();
+                if (c.0 - a.0).abs() < 0.31 {
                     isr.wz = false
+                }
+                if isr.is_running() {
+                    rotb.0 = t.rotation;
                 }
             }
             Rotor::Wy => {
@@ -434,8 +459,12 @@ fn rotate(
                 // println!("{:?} {:?}", r, t.rotation.to_axis_angle());
                 // b.0 += (a.0 - b.0).signum();
                 c.0 += get_virtual_angle(a.0, c.0, time.delta_seconds());
-                if c.0 == a.0 {
+                // rotb.0 = t.rotation.clone();
+                if (c.0 - a.0).abs() < 0.31 {
                     isr.wy = false
+                }
+                if isr.is_running() {
+                    rotb.0 = t.rotation;
                 }
             }
         }
@@ -448,9 +477,9 @@ fn rotate(
 #[inline]
 fn get_virtual_angle(after: f32, before: f32, delta_secs: f32) -> f32 {
     // println!("{delta_secs}");
-    if (after - before) > 0.1 {
+    if (after - before) > 0.3 {
         ((after - before) * delta_secs).clamp(0.3, 1.)
-    } else if (after - before) < -0.1 {
+    } else if (after - before) < -0.3 {
         ((after - before) * delta_secs).clamp(-1., -0.3)
     } else {
         0.
