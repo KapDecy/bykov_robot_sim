@@ -48,6 +48,7 @@ serialport = "*"
 anyhow = "*"
 ctrlc = "3.2.1"
 ufmt = "*"
+crossbeam-channel = '*'
 
 # Enable a small amount of optimization in debug mode
 [profile.dev]
