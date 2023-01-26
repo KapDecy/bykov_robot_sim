@@ -4,7 +4,6 @@ use bevy_egui::{egui, EguiContext, EguiPlugin};
 use bevy_infinite_grid::{InfiniteGrid, InfiniteGridBundle, InfiniteGridPlugin};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_obj::*;
-use iyes_loopless::prelude::*;
 
 use crossbeam_channel::{unbounded, Receiver, Sender};
 
@@ -264,22 +263,22 @@ fn egui_system(
     egui::Window::new("Arm Control").show(egui_context.ctx_mut(), |ui| {
         let mut v: Vec<_> = query.iter_mut().collect();
         v.sort_by(|a, b| a.5.cmp(b.5));
-        for (t, b, mut a, c, ac, r, rotb) in v {
+        for (_, _, mut a, _, ac, r, _) in v {
             match r {
                 Rotor::Sy => {
-                    ui.add(egui::Slider::new(&mut a.0, -170.0..=170.0));
+                    ui.add(egui::Slider::new(&mut a.0, -ac.0..=ac.0));
                 }
                 Rotor::Sz => {
-                    ui.add(egui::Slider::new(&mut a.0, -170.0..=170.0));
+                    ui.add(egui::Slider::new(&mut a.0, -ac.0..=ac.0));
                 }
                 Rotor::Ez => {
-                    ui.add(egui::Slider::new(&mut a.0, -170.0..=170.0));
+                    ui.add(egui::Slider::new(&mut a.0, -ac.0..=ac.0));
                 }
                 Rotor::Wz => {
                     ui.add(egui::Slider::new(&mut a.0, -ac.0..=ac.0));
                 }
                 Rotor::Wy => {
-                    ui.add(egui::Slider::new(&mut a.0, -170.0..=170.0));
+                    // ui.add(egui::Slider::new(&mut a.0, -ac.0..=ac.0));
                 }
             }
         }
@@ -312,15 +311,29 @@ fn calibrate(
         // let mut did_read = false;
         println!("start reading");
         let buf = read_from_port.recv().unwrap().trim().to_string();
+        let v: Vec<&str> = buf.split(' ').collect();
+        let sy = v[0].to_string();
+        let sz = v[1].to_string();
+        let ez = v[2].to_string();
+        let wz = v[3].to_string();
         println!("{:#?}", buf);
         for (_, _, _, _, mut ac, r, _) in query.iter_mut() {
             match r {
-                Rotor::Sy => (),
-                Rotor::Sz => (),
-                Rotor::Ez => (),
+                Rotor::Sy => {
+                    println!("read {buf}");
+                    ac.0 = (sy.parse::<i32>().unwrap() / 960) as f32;
+                }
+                Rotor::Sz => {
+                    println!("read {buf}");
+                    ac.0 = (sz.parse::<i32>().unwrap() / 960) as f32;
+                }
+                Rotor::Ez => {
+                    println!("read {buf}");
+                    ac.0 = (ez.parse::<i32>().unwrap() / 680) as f32;
+                }
                 Rotor::Wz => {
                     println!("read {buf}");
-                    ac.0 = (buf.parse::<i32>().unwrap() / 555) as f32;
+                    ac.0 = (wz.parse::<i32>().unwrap() / 555) as f32;
                 }
                 Rotor::Wy => (),
             }
@@ -350,7 +363,7 @@ fn run_simulation(
 
     let (mut sy, mut sz, mut ez, mut wz, mut wy) = (0_i64, 0_i64, 0_i64, 0_i64, 0_i64);
 
-    for (mut t, mut b, a, mut c, ac, r, mut rotb) in query.iter_mut() {
+    for (mut t, mut b, a, mut c, _ac, r, rotb) in query.iter_mut() {
         t.rotation = rotb.0;
 
         match r {
@@ -384,9 +397,9 @@ impl IsRunning {
     }
 }
 
-fn is_running(isr: Res<IsRunning>) -> bool {
-    isr.is_running()
-}
+// fn is_running(isr: Res<IsRunning>) -> bool {
+//     isr.is_running()
+// }
 
 fn rotate(
     time: Res<Time>,
@@ -400,7 +413,7 @@ fn rotate(
         &mut RotationBef,
     )>,
 ) {
-    for (mut t, mut b, mut c, a, r, mut rotb) in query.iter_mut() {
+    for (mut t, _, mut c, a, r, mut rotb) in query.iter_mut() {
         match r {
             Rotor::Sy => {
                 t.rotate_y(get_virtual_angle(a.0, c.0, time.delta_seconds()).to_radians());
