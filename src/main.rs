@@ -365,11 +365,11 @@ fn run_simulation(
 
     for (mut t, mut b, a, mut c, _ac, r, rotb) in query.iter_mut() {
         t.rotation = rotb.0;
-
+        // TODO исправить множители
         match r {
-            Rotor::Sy => sy = (a.0 - b.0) as i64 * 555,
-            Rotor::Sz => sz = (a.0 - b.0) as i64 * 555,
-            Rotor::Ez => ez = (a.0 - b.0) as i64 * 555,
+            Rotor::Sy => sy = (a.0 - b.0) as i64 * 960,
+            Rotor::Sz => sz = (a.0 - b.0) as i64 * 960,
+            Rotor::Ez => ez = (a.0 - b.0) as i64 * 680,
             Rotor::Wz => wz = (a.0 - b.0) as i64 * 555,
             Rotor::Wy => wy = (a.0 - b.0) as i64 * 555,
         }

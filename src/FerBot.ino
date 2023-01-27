@@ -1,3 +1,5 @@
+#include <ArduinoSort.h>
+
 const int motor1 = 43;
 const int motor2 = 37;
 const int motor3 = 31;
@@ -61,30 +63,95 @@ void setup() {
 }
 
 
-void simpleAccel(int motor, long steps) {
-  int lowspeed = 1500;
-  int highspeed = 40;
-  int change = 2;
+// void simpleAccel(int motor, long steps) {
+//   int lowspeed = 1500;
+//   int highspeed = 40;
+//   int change = 2;
+
   
-  long rampUpStop = (lowspeed - highspeed) / change;
-  if (rampUpStop > steps / 2) {
-    rampUpStop = steps / 2;  
+  
+//   long rampUpStop = (lowspeed - highspeed) / change;
+//   if (rampUpStop > steps / 2) {
+//     rampUpStop = steps / 2;  
+//   }
+
+//   long rampDownStart = steps - rampUpStop;
+
+//   int d = lowspeed;
+
+//   for (long i = 0; i < steps; i++) {
+//     digitalWrite(motors[motor], HIGH);
+//     digitalWrite(motors[motor], LOW);
+//     delayMicroseconds(d);
+
+//     if (i < rampUpStop)
+//       d -= change;
+//     else if (i > rampDownStart)
+//       d += change;
+//   }
+// }
+
+#define DEF_INTER 150
+
+void SameSpeedMove(long stepsarr[4]) {
+    long stepsLeft[] = {0,0,0,0};
+
+
+    // set direction for every motor
+    for (int motor = 0; motor < 4; motor++) {
+      long steps = stepsarr[motor];
+      
+      if (stepsarr[motor] < 0) {
+        digitalWrite(dirs[motor], LOW);
+        stepsarr[motor] = -1 * stepsarr[motor];
+      }
+      else {
+        digitalWrite(dirs[motor], HIGH);
+      }
+    }
+
+    // calculating inters
+    long inters[] = {DEF_INTER, DEF_INTER, DEF_INTER, DEF_INTER};
+    long max_steps = max(max(stepsarr[0], stepsarr[1]), max(stepsarr[2], stepsarr[3]));
+    // Serial.println(max_steps);
+    long time = max_steps * DEF_INTER;
+    // Serial.println(time);
+    // Serial.println();
+    for (int i = 0; i < 4; i++) {
+      if (stepsarr[i] != 0) {
+        inters[i] = time / stepsarr[i];
+        // Serial.println(inters[i]);
+      }
+      
+    }
+    // Serial.println();
+    long inter_gcd = gcd(gcd(inters[0], inters[1]), gcd(inters[2], inters[3])); 
+    // Serial.println(inter_gcd);
+    long tick_count = 0;
+
+    // move all motors simultaniosly
+    while ((stepsarr[0] - stepsLeft[0]) || (stepsarr[1] - stepsLeft[1]) || (stepsarr[2] - stepsLeft[2]) || (stepsarr[3] - stepsLeft[3])) {
+      for (int motor = 0; motor < 4; motor++) {
+        if ((stepsarr[motor] - stepsLeft[motor]) && ((tick_count * inter_gcd) % inters[motor] == 0)) {
+          digitalWrite(motors[motor], HIGH);
+          digitalWrite(motors[motor], LOW);
+          stepsLeft[motor]++;
+        }
+      }
+      delayMicroseconds(inter_gcd);
+      tick_count++;
+    }
+}
+
+int gcd(int a, int b) {
+  while (a!=b) {
+    if (a>b) {
+      a = a - b;
+    } else {
+      b = b - a;
+    }
   }
-
-  long rampDownStart = steps - rampUpStop;
-
-  int d = lowspeed;
-
-  for (long i = 0; i < steps; i++) {
-    digitalWrite(motors[motor], HIGH);
-    digitalWrite(motors[motor], LOW);
-    delayMicroseconds(d);
-
-    if (i < rampUpStop)
-      d -= change;
-    else if (i > rampDownStart)
-      d += change;
-  }
+  return a;
 }
 
 void simpleMove(int motor, long steps) {
@@ -226,9 +293,9 @@ void loop() {
 
 // ******************************************
 
+  
   long mode = 5;  
   long stepsarr[] = {0,0,0,0};
-  
   while (Serial.available() > 0) {
     // Serial.println("while");
     mode = Serial.parseInt();
@@ -242,6 +309,9 @@ void loop() {
     }
     else if (mode == 1) {
       calibAll();
+    }
+    else if (mode == 2) {
+      SameSpeedMove(stepsarr);
     }
   }
 // ******************************************
